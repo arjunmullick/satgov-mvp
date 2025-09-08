@@ -168,8 +168,8 @@ Pipeline (Current Offline Implementation)
 
 Moving to Real Data (Next Steps)
 - STAC Search & Download (`src/ingest/stac_search.py`, `download.py`):
-  - Implement with `pystac-client` against Microsoft Planetary Computer or Element84.
-  - Sentinel-2 L2A: bands B02, B03, B04, B08, SCL; Sentinel-1 GRD: VV/VH asc/desc in dB; Landsat 8/9 thermal (optional).
+  - Implemented with `pystac-client` against Element84 STAC; stacked via `stackstac`.
+  - Sentinel-2 L2A: B02, B03, B04, B08 for NDVI/NDWI composites; Sentinel-1 GRD: VV/VH and VV–VH ratio.
 - Preprocess (`src/ingest/preprocess.py`):
   - Reproject to UTM for computation; clip to AOI.
   - S2 cloud/shadow mask using SCL (classes 3, 8, 9, 10, 11).
@@ -183,6 +183,7 @@ Moving to Real Data (Next Steps)
   - Build matplotlib PNG summaries with NDVI/NDWI charts, classification pie, and top-N action list CSVs.
 - Web UI:
   - Add AOI upload form to call `POST /ingest`; parcel click popups to fetch `/report/parcel/{id}`.
+  - Added buttons: NDVI/NDWI (tiles), NDVI/NDWI Overlay (ImageOverlay demo), and S1 VV/VH/Ratio.
 
 Using Local GeoTIFFs Instead of STAC
 - Place your COG/GeoTIFF assets under `data/raw/` and adjust `src/ingest/preprocess.py` to read from there before attempting STAC.
@@ -226,3 +227,24 @@ Roadmap / TODOs
 - Add DEM slope/aspect and optional rainfall/time-trend features.
 - Generate multi-zoom XYZ tiles via rio-tiler or COG pathway.
 - Enrich reports and web UI with charts and interactions.
+Metric Cheat Sheet (What NDVI/NDWI mean)
+- NDVI (Normalized Difference Vegetation Index): `(NIR - Red) / (NIR + Red)` — healthy vegetation ~0.5–0.8; barren/built-up/water <0.2.
+- EVI (Enhanced Vegetation Index): vegetation index robust to canopy background; uses Blue band and coefficients.
+- NDWI (Normalized Difference Water Index): `(Green - NIR) / (Green + NIR)` — highlights surface water/wetness (higher = wetter).
+- MNDWI (Modified NDWI): `(Green - SWIR1) / (Green + SWIR1)` — sharper water delineation in presence of built-up.
+- S1 VV/VH (backscatter, dB): microwave returns sensitive to roughness/moisture; `VV-VH` (dB) is a simple ratio proxy.
+
+Real STAC Ingest (Detailed)
+1) Start server: `uvicorn src.api.server:app --reload`
+2) Trigger ingest:
+   - `curl -s -X POST 'http://localhost:8000/ingest' \
+      -F 'aoi_path=data/aoi/goa_demo.geojson' \
+      -F 'start=2024-11-01' -F 'end=2025-03-31' \
+      -F 'source=stac' | jq`
+3) Output:
+   - GeoTIFFs in `data/interim/ndvi.tif`, `data/interim/ndwi.tif` (and `s1_*.tif` if available)
+   - XYZ tiles in `data/tiles/ndvi`, `data/tiles/ndwi`, `data/tiles/s1_vv`, `data/tiles/s1_vh`, `data/tiles/s1_ratio`
+4) View:
+   - Open `http://localhost:8000/` and toggle NDVI/NDWI and S1 layer buttons.
+5) Notes:
+   - Keep AOI/date modest for speed; adjust `limit` and `zooms` in `run_stac_pipeline` if needed.
