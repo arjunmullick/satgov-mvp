@@ -1,0 +1,22 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"name": "goa_demo"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [73.90, 15.30],
+            [73.90, 15.50],
+            [74.10, 15.50],
+            [74.10, 15.30],
+            [73.90, 15.30]
+          ]
+        ]
+      }
+    }
+  ]
+}
+

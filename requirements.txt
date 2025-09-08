@@ -1,0 +1,27 @@
+# Minimal pip/venv fallback for satgov-mvp (CPU-only)
+
+numpy
+pandas
+xarray
+rasterio
+rioxarray
+geopandas
+shapely
+pyproj
+matplotlib
+Pillow
+scikit-learn
+xgboost
+torch
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+requests
+pystac-client
+stackstac
+rio-cogeo
+opencv-python
+folium
+joblib
+

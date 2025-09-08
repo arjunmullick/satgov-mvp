@@ -1,0 +1,31 @@
+name: satgov
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - numpy
+  - pandas
+  - xarray
+  - rasterio
+  - rioxarray
+  - geopandas
+  - shapely
+  - pyproj
+  - matplotlib
+  - pillow
+  - scikit-learn
+  - xgboost
+  - pytorch
+  - fastapi
+  - uvicorn
+  - jinja2
+  - python-multipart
+  - requests
+  - pip:
+      - pystac-client
+      - stackstac
+      - rio-cogeo
+      - opencv-python
+      - folium
+      - joblib
