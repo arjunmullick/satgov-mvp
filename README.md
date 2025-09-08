@@ -73,6 +73,73 @@ Quick Start
 - Run end-to-end pipeline (synthetic offline fallback):
   - `bash scripts/run_pipeline.sh --aoi data/aoi/goa_demo.geojson --start 2024-11-01 --end 2025-03-31`
 
+Step-by-Step: Test, Run, and Demo
+1) Prerequisites
+   - macOS/Linux with Python 3.11+
+   - Option A (recommended): Conda/Miniforge
+   - Option B: Pip + venv
+
+2) Setup
+   - Conda:
+     - `cd satgov-mvp`
+     - `conda env create -f environment.yml`
+     - `conda activate satgov`
+   - OR Pip/venv:
+     - `cd satgov-mvp`
+     - `python3 -m venv .venv`
+     - `source .venv/bin/activate`
+     - `pip install --upgrade pip setuptools wheel`
+     - `pip install -r requirements.txt`
+
+3) Generate Demo Data (synthetic, offline)
+   - Ensure sample AOI exists: `data/aoi/goa_demo.geojson` (provided).
+   - Run pipeline:
+     - `bash scripts/run_pipeline.sh --aoi data/aoi/goa_demo.geojson --start 2024-11-01 --end 2025-03-31`
+   - Check outputs:
+     - `ls data/features/` (features.csv, predictions.csv)
+     - `ls data/models/` (irrigate_clf.pkl)
+     - `ls data/tiles/` (ndvi/…, ndwi/…, reports/…)
+
+4) Run API Server and Web UI
+   - From repo root: `uvicorn src.api.server:app --reload`
+   - Open: `http://localhost:8000/` → auto-redirects to `/web/leaflet.html`
+   - Use panel buttons to toggle NDVI/NDWI overlays (tiles are served at `/tiles/...`).
+
+5) API Smoke Tests (curl)
+   - Health: `curl -s localhost:8000/health`
+   - Ingest (re-run pipeline):
+     - `curl -s -X POST localhost:8000/ingest -F aoi_path=data/aoi/goa_demo.geojson -F start=2024-11-01 -F end=2025-03-31 | jq`
+   - Tiles (autocreate if missing):
+     - `curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/tiles/ndvi/0/0/0.png`
+   - Parcel report (mock): `curl -s localhost:8000/report/parcel/1 | jq`
+   - Village report (mock): `curl -s localhost:8000/report/village/Assagao | jq`
+   - WhatsApp-style bot:
+     - `curl -s -X POST localhost:8000/bot -F text="1" | jq`
+     - `curl -s -X POST localhost:8000/bot -F text="Assagao" | jq`
+
+6) Inspect Model/Features
+   - Print predictions head:
+```
+python - <<'PY'
+import pandas as pd; print(pd.read_csv("data/features/predictions.csv").head())
+PY
+```
+
+7) Optional: Make Parcel Grid
+   - Build a 100 m parcel grid GeoPackage:
+     - `python scripts/make_aoi_grid.py data/aoi/goa_demo.geojson data/interim/parcel_grid.gpkg --cell 100`
+
+8) Run Tests
+   - Install pytest if not present: `pip install pytest`
+   - Run: `pytest -q`
+   - Covered: indices shapes/ranges, parcel aggregation, API endpoints.
+
+Troubleshooting
+- `conda: command not found`: install Miniforge (`brew install --cask miniforge`; `conda init zsh`; restart shell) or use Pip/Venv flow.
+- 404 at `/`: ensure the server is the latest (root redirects to `/web/leaflet.html`).
+- Port in use: `uvicorn src.api.server:app --reload --port 8001`.
+- Pip/venv binary wheels issue: ensure Python 3.11; `pip install --upgrade pip`; consider `brew install gdal` or switch to Conda.
+
 Endpoints
 - `GET /health` → `{"ok": true}`
 - `POST /ingest` (form-data `aoi_path`, `start`, `end`) → runs pipeline (offline synthetic by default); returns paths to outputs.
