@@ -119,7 +119,19 @@ def run_stac_pipeline(aoi_path: str, start: str, end: str, limit: int = 2, zooms
         if not s2_items:
             return {"status": "no_items", "message": "No S2 items from STAC search."}
         # Let stackstac pick bounds; then clip to AOI bbox to avoid bounds issues
-        stack = stackstac.stack(s2_items, assets=["B02", "B03", "B04", "B08"])  # time, band, y, x
+        # Try common asset key sets for S2
+        assets_try = [["B02", "B03", "B04", "B08"], ["blue", "green", "red", "nir"]]
+        last_err = None
+        stack = None
+        for aset in assets_try:
+            try:
+                stack = stackstac.stack(s2_items, assets=aset)  # time, band, y, x
+                break
+            except Exception as ee:
+                last_err = ee
+                continue
+        if stack is None:
+            raise last_err or Exception("Failed to stack S2 assets")
         comp = stack.median(dim="time")
         try:
             comp = comp.rio.reproject("EPSG:4326")
@@ -174,4 +186,78 @@ def run_stac_pipeline(aoi_path: str, start: str, end: str, limit: int = 2, zooms
 
         return {"status": "ok", "ndvi": ndvi_path, "ndwi": ndwi_path}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        # Fallback: use first S2 item assets directly via rasterio to build a single-scene composite
+        try:
+            from .ingest.stac_search import search_s2
+            import geopandas as gpd
+            import rasterio
+            from rasterio.transform import from_bounds
+            from rasterio.warp import reproject, Resampling
+            import numpy as np
+
+            aoi = gpd.read_file(aoi_path).to_crs(4326)
+            minx, miny, maxx, maxy = aoi.total_bounds
+            items = search_s2(aoi_path, start, end, limit=5)
+            if not items:
+                return {"status": "error", "message": str(e)}
+            # Pick first item that has normalized bands
+            chosen = None
+            for it in items:
+                a = it.assets
+                if all(k in a for k in ("blue", "green", "red", "nir")):
+                    chosen = a
+                    break
+            if chosen is None:
+                return {"status": "error", "message": "S2 item missing required bands"}
+            # Target grid in EPSG:4326 at ~0.00009 deg (~10 m)
+            res = 0.00009
+            width = max(1, int(np.ceil((maxx - minx) / res)))
+            height = max(1, int(np.ceil((maxy - miny) / res)))
+            dst_transform = from_bounds(minx, miny, maxx, maxy, width, height)
+            dst_crs = "EPSG:4326"
+
+            def reproject_band(href: str) -> np.ndarray:
+                dst = np.zeros((height, width), dtype=np.float32)
+                with rasterio.open(href) as src:
+                    reproject(
+                        source=rasterio.band(src, 1),
+                        destination=dst,
+                        src_transform=src.transform,
+                        src_crs=src.crs,
+                        dst_transform=dst_transform,
+                        dst_crs=dst_crs,
+                        resampling=Resampling.bilinear,
+                    )
+                return dst
+
+            blue = reproject_band(chosen["blue"]) / 10000.0
+            green = reproject_band(chosen["green"]) / 10000.0
+            red = reproject_band(chosen["red"]) / 10000.0
+            nir = reproject_band(chosen["nir"]) / 10000.0
+            ndvi = (nir - red) / np.where((nir + red) != 0, (nir + red), 1)
+            ndwi = (green - nir) / np.where((green + nir) != 0, (green + nir), 1)
+
+            # Write GeoTIFFs
+            profile = {
+                "driver": "GTiff",
+                "height": height,
+                "width": width,
+                "count": 1,
+                "dtype": "float32",
+                "crs": dst_crs,
+                "transform": dst_transform,
+                "compress": "deflate",
+            }
+            ndvi_path = os.path.join(settings.interim_dir, "ndvi.tif")
+            ndwi_path = os.path.join(settings.interim_dir, "ndwi.tif")
+            with rasterio.open(ndvi_path, "w", **profile) as dst:
+                dst.write(ndvi.astype(np.float32), 1)
+            with rasterio.open(ndwi_path, "w", **profile) as dst:
+                dst.write(ndwi.astype(np.float32), 1)
+
+            # Tiles
+            generate_xyz_tiles_from_geotiff(ndvi_path, "ndvi", settings.tiles_dir, (minx, miny, maxx, maxy), zooms, cmap="RdYlGn", vmin=-0.2, vmax=0.8)
+            generate_xyz_tiles_from_geotiff(ndwi_path, "ndwi", settings.tiles_dir, (minx, miny, maxx, maxy), zooms, cmap="PuBuGn", vmin=-0.5, vmax=0.5)
+            return {"status": "ok", "ndvi": ndvi_path, "ndwi": ndwi_path, "fallback": True}
+        except Exception as e2:
+            return {"status": "error", "message": str(e2)}
