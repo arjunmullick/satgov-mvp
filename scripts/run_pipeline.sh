@@ -29,7 +29,7 @@ if [[ ! -f "$AOI" ]]; then
 fi
 
 export PYTHONPATH=$(cd "$(dirname "$0")/.." && pwd)
-python - <<'PY'
+python3 - "$AOI" "$START" "$END" <<'PY'
 import os, sys
 from src.pipeline import run_offline_pipeline
 
@@ -39,7 +39,5 @@ end = os.environ.get('END_DATE') or sys.argv[3]
 res = run_offline_pipeline(aoi, start, end)
 print(res)
 PY
-"$AOI" "$START" "$END"
 
 echo "Pipeline completed. See data/features and data/tiles."
-
