@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from datetime import datetime
 from fastapi import FastAPI, UploadFile, Form
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from ..config import settings
@@ -37,3 +37,19 @@ tiles_dir = os.path.abspath(settings.tiles_dir)
 ensure_dir(tiles_dir)
 app.mount("/static/tiles", StaticFiles(directory=tiles_dir), name="tiles")
 
+# Mount web static directory and redirect root to leaflet
+web_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../web"))
+if os.path.isdir(web_dir):
+    app.mount("/web", StaticFiles(directory=web_dir), name="web")
+
+
+@app.get("/")
+def root():
+    # Redirect to the Leaflet demo page
+    return RedirectResponse(url="/web/leaflet.html")
+
+
+@app.get("/favicon.ico")
+def favicon():
+    # No favicon; return empty response to avoid 404 spam
+    return Response(status_code=204)
