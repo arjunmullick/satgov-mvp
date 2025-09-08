@@ -66,12 +66,16 @@ def run_offline_pipeline(aoi_path: str, start: str, end: str) -> dict:
     pred_df.to_csv(pred_csv, index=False)
 
     # Simple tiles
-    for layer, arr in {"ndvi": ndvi, "ndwi": ndwi}.items():
+    # Render simple demo tiles with distinct colormaps and value ranges
+    render_cfg = {
+        "ndvi": {"arr": ndvi, "cmap": "RdYlGn", "vmin": -0.2, "vmax": 0.8},
+        "ndwi": {"arr": ndwi, "cmap": "PuBuGn", "vmin": -0.5, "vmax": 0.5},
+    }
+    for layer, cfg in render_cfg.items():
         out = os.path.join(settings.tiles_dir, layer, "0", "0", "0.png")
-        save_png(arr, out)
+        save_png(cfg["arr"], out, vmin=cfg["vmin"], vmax=cfg["vmax"], colormap=cfg["cmap"])  # type: ignore
 
     # Summary report tile
     save_blank_tile(os.path.join(settings.tiles_dir, "reports", "summary.png"), text="Summary")
 
     return {"features": features_csv, "predictions": pred_csv, "model": model_path}
-
