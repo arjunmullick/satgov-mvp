@@ -8,6 +8,7 @@ import geopandas as gpd
 from .config import settings
 from .utils.io import ensure_dir
 from .utils.viz import save_blank_tile, save_png
+from .utils.tiles import generate_xyz_tiles_from_geotiff
 from .utils.geoutils import read_aoi, bbox_xyxy
 from .ingest.preprocess import preprocess_to_interim
 from .features.s2_indices import compute_s2_indices
