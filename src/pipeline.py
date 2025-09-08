@@ -136,6 +136,30 @@ def run_stac_pipeline(aoi_path: str, start: str, end: str, limit: int = 2, zooms
         generate_xyz_tiles_from_geotiff(ndvi_path, "ndvi", settings.tiles_dir, aoi.total_bounds, zooms, cmap="RdYlGn", vmin=-0.2, vmax=0.8)
         generate_xyz_tiles_from_geotiff(ndwi_path, "ndwi", settings.tiles_dir, aoi.total_bounds, zooms, cmap="PuBuGn", vmin=-0.5, vmax=0.5)
 
+        # Sentinel-1 GRD VV/VH composites and ratio
+        try:
+            s1_search = client.search(collections=["sentinel-1-grd"], intersects=geom, datetime=f"{start}/{end}")
+            s1_items = list(s1_search.get_items())[:limit]
+            if s1_items:
+                s1_stack = stackstac.stack(s1_items, assets=["VV", "VH"], bounds_latlon=aoi.total_bounds)
+                s1_comp = s1_stack.median(dim="time")
+                vv = (10.0 * (s1_comp.sel(band="VV").astype("float32"))).rio.write_crs(4326)
+                vh = (10.0 * (s1_comp.sel(band="VH").astype("float32"))).rio.write_crs(4326)
+                # Ratio in linear units approximated by exp(dB/10); here keep in dB diff as proxy
+                ratio = (vv - vh).rio.write_crs(4326)
+                vv_path = os.path.join(settings.interim_dir, "s1_vv.tif")
+                vh_path = os.path.join(settings.interim_dir, "s1_vh.tif")
+                ratio_path = os.path.join(settings.interim_dir, "s1_ratio.tif")
+                vv.rio.to_raster(vv_path, compress="deflate")
+                vh.rio.to_raster(vh_path, compress="deflate")
+                ratio.rio.to_raster(ratio_path, compress="deflate")
+
+                generate_xyz_tiles_from_geotiff(vv_path, "s1_vv", settings.tiles_dir, aoi.total_bounds, zooms, cmap="Greys", vmin=-25, vmax=0)
+                generate_xyz_tiles_from_geotiff(vh_path, "s1_vh", settings.tiles_dir, aoi.total_bounds, zooms, cmap="Greys", vmin=-30, vmax=-5)
+                generate_xyz_tiles_from_geotiff(ratio_path, "s1_ratio", settings.tiles_dir, aoi.total_bounds, zooms, cmap="Magma", vmin=0, vmax=15)
+        except Exception:
+            pass
+
         return {"status": "ok", "ndvi": ndvi_path, "ndwi": ndwi_path}
     except Exception as e:
         return {"status": "error", "message": str(e)}

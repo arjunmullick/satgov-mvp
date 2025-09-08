@@ -15,8 +15,15 @@
     <div id="panel">
       <button onclick="setLayer('ndvi')">NDVI</button>
       <button onclick="setLayer('ndwi')">NDWI</button>
-      <button onclick="showOverlay('ndvi')">Overlay Demo</button>
+      <button onclick="showOverlay('ndvi')">NDVI Overlay</button>
+      <button onclick="showOverlay('ndwi')">NDWI Overlay</button>
       <button onclick="showTiles()">Back to Tiles</button>
+      <div style="margin-top:6px;">
+        <span>S1:</span>
+        <button onclick="setLayer('s1_vv')">VV</button>
+        <button onclick="setLayer('s1_vh')">VH</button>
+        <button onclick="setLayer('s1_ratio')">VV-VH</button>
+      </div>
       <div>
         Opacity: <input id="opacity" type="range" min="0" max="1" step="0.05" value="0.7" />
       </div>
