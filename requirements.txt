@@ -24,4 +24,4 @@ rio-cogeo
 opencv-python
 folium
 joblib
-
+mercantile

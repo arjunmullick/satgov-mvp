@@ -11,7 +11,7 @@ from ..utils.io import ensure_dir
 from .routes_maps import router as maps_router
 from .routes_reports import router as reports_router
 from .routes_bot import router as bot_router
-from ..pipeline import run_offline_pipeline
+from ..pipeline import run_offline_pipeline, run_stac_pipeline
 
 
 app = FastAPI(title="SatGov MVP")
@@ -26,9 +26,12 @@ def health():
 
 
 @app.post("/ingest")
-async def ingest(aoi_path: str = Form(...), start: str = Form(...), end: str = Form(...)):
-    # Minimal: run offline synthetic pipeline writing tiles and reports
-    result = run_offline_pipeline(aoi_path=aoi_path, start=start, end=end)
+async def ingest(aoi_path: str = Form(...), start: str = Form(...), end: str = Form(...), source: str = Form("offline")):
+    # Run offline synthetic pipeline or real STAC pipeline
+    if source == "stac":
+        result = run_stac_pipeline(aoi_path=aoi_path, start=start, end=end)
+    else:
+        result = run_offline_pipeline(aoi_path=aoi_path, start=start, end=end)
     return JSONResponse({"status": "ok", **result})
 
 

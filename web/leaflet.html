@@ -15,6 +15,8 @@
     <div id="panel">
       <button onclick="setLayer('ndvi')">NDVI</button>
       <button onclick="setLayer('ndwi')">NDWI</button>
+      <button onclick="showOverlay('ndvi')">Overlay Demo</button>
+      <button onclick="showTiles()">Back to Tiles</button>
       <div>
         Opacity: <input id="opacity" type="range" min="0" max="1" step="0.05" value="0.7" />
       </div>
@@ -24,14 +26,34 @@
     <script>
       const map = L.map('map').setView([15.4, 73.9], 9);
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-      let overlay = null;
+      let overlay = null; // tile overlay
+      let imageOverlay = null; // image overlay
       function setLayer(name) {
+        if (imageOverlay) { map.removeLayer(imageOverlay); imageOverlay = null; }
         if (overlay) map.removeLayer(overlay);
         overlay = L.tileLayer('/tiles/' + name + '/{z}/{x}/{y}.png', {
           maxZoom: 19,
           maxNativeZoom: 0,
           opacity: parseFloat(document.getElementById('opacity').value)
         }).addTo(map);
+      }
+      async function showOverlay(name) {
+        // Fetch overlay URL and bounds from API; add ImageOverlay
+        try {
+          const res = await fetch('/overlay/' + name);
+          const j = await res.json();
+          const url = j.url;
+          const b = j.bounds; // [[south, west], [north, east]]
+          if (overlay) { map.removeLayer(overlay); overlay = null; }
+          if (imageOverlay) { map.removeLayer(imageOverlay); imageOverlay = null; }
+          imageOverlay = L.imageOverlay(url, b, {opacity: parseFloat(document.getElementById('opacity').value)}).addTo(map);
+          map.fitBounds(b);
+        } catch (e) {
+          alert('Overlay not available. Run the pipeline first via /ingest.');
+        }
+      }
+      function showTiles() {
+        setLayer('ndvi');
       }
       setLayer('ndvi');
       document.getElementById('opacity').addEventListener('input', (e) => {

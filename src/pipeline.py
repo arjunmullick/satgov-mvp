@@ -8,6 +8,7 @@ import geopandas as gpd
 from .config import settings
 from .utils.io import ensure_dir
 from .utils.viz import save_blank_tile, save_png
+from .utils.geoutils import read_aoi, bbox_xyxy
 from .ingest.preprocess import preprocess_to_interim
 from .features.s2_indices import compute_s2_indices
 from .features.s1_features import compute_s1_features
@@ -75,7 +76,66 @@ def run_offline_pipeline(aoi_path: str, start: str, end: str) -> dict:
         out = os.path.join(settings.tiles_dir, layer, "0", "0", "0.png")
         save_png(cfg["arr"], out, vmin=cfg["vmin"], vmax=cfg["vmax"], colormap=cfg["cmap"])  # type: ignore
 
+    # AOI-cropped overlay images for ImageOverlay demo
+    aoi_gdf = read_aoi(aoi_path)
+    minx, miny, maxx, maxy = bbox_xyxy(aoi_gdf)
+    overlays_dir = os.path.join(settings.tiles_dir, "overlays")
+    os.makedirs(overlays_dir, exist_ok=True)
+    save_png(ndvi, os.path.join(overlays_dir, "ndvi.png"), vmin=-0.2, vmax=0.8, colormap="RdYlGn")
+    save_png(ndwi, os.path.join(overlays_dir, "ndwi.png"), vmin=-0.5, vmax=0.5, colormap="PuBuGn")
+
     # Summary report tile
     save_blank_tile(os.path.join(settings.tiles_dir, "reports", "summary.png"), text="Summary")
 
-    return {"features": features_csv, "predictions": pred_csv, "model": model_path}
+    return {
+        "features": features_csv,
+        "predictions": pred_csv,
+        "model": model_path,
+        "overlay_bounds": [[miny, minx], [maxy, maxx]],
+    }
+
+
+def run_stac_pipeline(aoi_path: str, start: str, end: str, limit: int = 2, zooms: list[int] | None = None) -> dict:
+    """Search STAC for S2, compute NDVI/NDWI, write GeoTIFFs, and generate XYZ tiles."""
+    ensure_dir(settings.raw_dir)
+    ensure_dir(settings.interim_dir)
+    ensure_dir(settings.tiles_dir)
+
+    zooms = zooms or [8, 9, 10, 11, 12]
+
+    try:
+        import json as _json
+        import geopandas as gpd
+        from pystac_client import Client
+        import stackstac
+        import rioxarray  # noqa: F401
+
+        aoi = gpd.read_file(aoi_path).to_crs(4326)
+        geom = _json.loads(aoi.iloc[0].geometry.to_json())
+        client = Client.open("https://earth-search.aws.element84.com/v1")
+        search = client.search(collections=["sentinel-2-l2a"], intersects=geom, datetime=f"{start}/{end}")
+        s2_items = list(search.get_items())[:limit]
+        if not s2_items:
+            return {"status": "no_items", "message": "No S2 items from STAC search."}
+        stack = stackstac.stack(s2_items, assets=["B02", "B03", "B04", "B08"], bounds_latlon=aoi.total_bounds)
+        comp = stack.median(dim="time")
+        blue = comp.sel(band="B02").astype("float32") / 10000.0
+        green = comp.sel(band="B03").astype("float32") / 10000.0
+        red = comp.sel(band="B04").astype("float32") / 10000.0
+        nir = comp.sel(band="B08").astype("float32") / 10000.0
+        ndvi = (nir - red) / ((nir + red).where((nir + red) != 0, 1))
+        ndwi = (green - nir) / ((green + nir).where((green + nir) != 0, 1))
+        ndvi = ndvi.rio.write_crs(4326)
+        ndwi = ndwi.rio.write_crs(4326)
+        ndvi_path = os.path.join(settings.interim_dir, "ndvi.tif")
+        ndwi_path = os.path.join(settings.interim_dir, "ndwi.tif")
+        ndvi.rio.to_raster(ndvi_path, compress="deflate")
+        ndwi.rio.to_raster(ndwi_path, compress="deflate")
+
+        from .utils.tiles import generate_xyz_tiles_from_geotiff
+        generate_xyz_tiles_from_geotiff(ndvi_path, "ndvi", settings.tiles_dir, aoi.total_bounds, zooms, cmap="RdYlGn", vmin=-0.2, vmax=0.8)
+        generate_xyz_tiles_from_geotiff(ndwi_path, "ndwi", settings.tiles_dir, aoi.total_bounds, zooms, cmap="PuBuGn", vmin=-0.5, vmax=0.5)
+
+        return {"status": "ok", "ndvi": ndvi_path, "ndwi": ndwi_path}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
