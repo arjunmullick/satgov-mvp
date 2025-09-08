@@ -8,6 +8,15 @@
       html, body, #map { height: 100%; margin: 0; }
       #panel { position: absolute; top: 10px; right: 10px; background: #fff; padding: 8px; z-index: 1000; }
       #panel input[type="range"] { width: 160px; }
+      .legend { position: absolute; bottom: 18px; left: 10px; background: #fff; padding: 8px 10px; border-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.2); z-index: 1000; font: 12px/1.2 Arial, sans-serif; }
+      .legend-title { font-weight: bold; margin-bottom: 6px; }
+      .legend-gradient { width: 220px; height: 12px; border-radius: 2px; margin-bottom: 4px; }
+      .legend-scale { display: flex; justify-content: space-between; }
+      /* Approximate gradients */
+      .rdylgn { background: linear-gradient(to right, #a50026, #f46d43, #fee08b, #66bd63, #006837); }
+      .pubugn { background: linear-gradient(to right, #f7fcfd, #ccece6, #66c2a4, #238b45); }
+      .greys  { background: linear-gradient(to right, #ffffff, #000000); }
+      .magma  { background: linear-gradient(to right, #000004, #3b0f6f, #8c2981, #de4968, #fe9f6d, #fcfdbf); }
     </style>
   </head>
   <body>
@@ -29,6 +38,11 @@
       </div>
       <div id="info"></div>
     </div>
+    <div id="legend" class="legend">
+      <div id="legend-title" class="legend-title">NDVI</div>
+      <div id="legend-gradient" class="legend-gradient rdylgn"></div>
+      <div class="legend-scale"><span id="legend-min">-0.2</span><span id="legend-max">0.8</span></div>
+    </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
       const map = L.map('map').setView([15.4, 73.9], 9);
@@ -43,6 +57,7 @@
           maxNativeZoom: 0,
           opacity: parseFloat(document.getElementById('opacity').value)
         }).addTo(map);
+        updateLegend(name);
       }
       async function showOverlay(name) {
         // Fetch overlay URL and bounds from API; add ImageOverlay
@@ -55,6 +70,7 @@
           if (imageOverlay) { map.removeLayer(imageOverlay); imageOverlay = null; }
           imageOverlay = L.imageOverlay(url, b, {opacity: parseFloat(document.getElementById('opacity').value)}).addTo(map);
           map.fitBounds(b);
+          updateLegend(name);
         } catch (e) {
           alert('Overlay not available. Run the pipeline first via /ingest.');
         }
@@ -65,7 +81,47 @@
       setLayer('ndvi');
       document.getElementById('opacity').addEventListener('input', (e) => {
         if (overlay) overlay.setOpacity(parseFloat(e.target.value));
+        if (imageOverlay) imageOverlay.setOpacity(parseFloat(e.target.value));
       });
+
+      function updateLegend(name) {
+        const title = document.getElementById('legend-title');
+        const grad = document.getElementById('legend-gradient');
+        const minEl = document.getElementById('legend-min');
+        const maxEl = document.getElementById('legend-max');
+        grad.className = 'legend-gradient';
+        if (name === 'ndvi') {
+          title.textContent = 'NDVI';
+          grad.classList.add('rdylgn');
+          minEl.textContent = '-0.2';
+          maxEl.textContent = '0.8';
+        } else if (name === 'ndwi') {
+          title.textContent = 'NDWI';
+          grad.classList.add('pubugn');
+          minEl.textContent = '-0.5';
+          maxEl.textContent = '0.5';
+        } else if (name === 's1_vv') {
+          title.textContent = 'S1 VV (dB)';
+          grad.classList.add('greys');
+          minEl.textContent = '-25';
+          maxEl.textContent = '0';
+        } else if (name === 's1_vh') {
+          title.textContent = 'S1 VH (dB)';
+          grad.classList.add('greys');
+          minEl.textContent = '-30';
+          maxEl.textContent = '-5';
+        } else if (name === 's1_ratio') {
+          title.textContent = 'VV−VH (dB)';
+          grad.classList.add('magma');
+          minEl.textContent = '0';
+          maxEl.textContent = '15';
+        } else {
+          title.textContent = name;
+          grad.classList.add('greys');
+          minEl.textContent = '';
+          maxEl.textContent = '';
+        }
+      }
     </script>
   </body>
   </html>

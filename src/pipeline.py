@@ -111,14 +111,21 @@ def run_stac_pipeline(aoi_path: str, start: str, end: str, limit: int = 2, zooms
         import rioxarray  # noqa: F401
 
         aoi = gpd.read_file(aoi_path).to_crs(4326)
+        minx, miny, maxx, maxy = aoi.total_bounds
         geom = mapping(aoi.iloc[0].geometry)
         client = Client.open("https://earth-search.aws.element84.com/v1")
         search = client.search(collections=["sentinel-2-l2a"], intersects=geom, datetime=f"{start}/{end}")
         s2_items = list(search.get_items())[:limit]
         if not s2_items:
             return {"status": "no_items", "message": "No S2 items from STAC search."}
-        stack = stackstac.stack(s2_items, assets=["B02", "B03", "B04", "B08"], bounds_latlon=aoi.total_bounds)
+        # Let stackstac pick bounds; then clip to AOI bbox to avoid bounds issues
+        stack = stackstac.stack(s2_items, assets=["B02", "B03", "B04", "B08"])  # time, band, y, x
         comp = stack.median(dim="time")
+        try:
+            comp = comp.rio.reproject("EPSG:4326")
+        except Exception:
+            pass
+        comp = comp.rio.clip_box(minx=minx, miny=miny, maxx=maxx, maxy=maxy)
         blue = comp.sel(band="B02").astype("float32") / 10000.0
         green = comp.sel(band="B03").astype("float32") / 10000.0
         red = comp.sel(band="B04").astype("float32") / 10000.0
@@ -141,8 +148,13 @@ def run_stac_pipeline(aoi_path: str, start: str, end: str, limit: int = 2, zooms
             s1_search = client.search(collections=["sentinel-1-grd"], intersects=geom, datetime=f"{start}/{end}")
             s1_items = list(s1_search.get_items())[:limit]
             if s1_items:
-                s1_stack = stackstac.stack(s1_items, assets=["VV", "VH"], bounds_latlon=aoi.total_bounds)
+                s1_stack = stackstac.stack(s1_items, assets=["VV", "VH"])  # time, band, y, x
                 s1_comp = s1_stack.median(dim="time")
+                try:
+                    s1_comp = s1_comp.rio.reproject("EPSG:4326")
+                except Exception:
+                    pass
+                s1_comp = s1_comp.rio.clip_box(minx=minx, miny=miny, maxx=maxx, maxy=maxy)
                 vv = (10.0 * (s1_comp.sel(band="VV").astype("float32"))).rio.write_crs(4326)
                 vh = (10.0 * (s1_comp.sel(band="VH").astype("float32"))).rio.write_crs(4326)
                 # Ratio in linear units approximated by exp(dB/10); here keep in dB diff as proxy

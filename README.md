@@ -104,6 +104,7 @@ Step-by-Step: Test, Run, and Demo
    - From repo root: `uvicorn src.api.server:app --reload`
    - Open: `http://localhost:8000/` → auto-redirects to `/web/leaflet.html`
    - Use panel buttons to toggle NDVI/NDWI overlays (tiles are served at `/tiles/...`).
+   - A legend (bottom-left) updates with the active layer’s color scale and value range (NDVI, NDWI, S1 VV/VH, VV−VH).
 
 5) API Smoke Tests (curl)
    - Health: `curl -s localhost:8000/health`
