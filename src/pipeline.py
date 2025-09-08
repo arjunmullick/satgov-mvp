@@ -104,14 +104,14 @@ def run_stac_pipeline(aoi_path: str, start: str, end: str, limit: int = 2, zooms
     zooms = zooms or [8, 9, 10, 11, 12]
 
     try:
-        import json as _json
         import geopandas as gpd
+        from shapely.geometry import mapping
         from pystac_client import Client
         import stackstac
         import rioxarray  # noqa: F401
 
         aoi = gpd.read_file(aoi_path).to_crs(4326)
-        geom = _json.loads(aoi.iloc[0].geometry.to_json())
+        geom = mapping(aoi.iloc[0].geometry)
         client = Client.open("https://earth-search.aws.element84.com/v1")
         search = client.search(collections=["sentinel-2-l2a"], intersects=geom, datetime=f"{start}/{end}")
         s2_items = list(search.get_items())[:limit]

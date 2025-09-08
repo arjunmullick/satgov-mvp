@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import List, Dict, Any
-import json
 import geopandas as gpd
+from shapely.geometry import mapping
 from pystac_client import Client
 
 
@@ -15,7 +15,7 @@ class STACItem:
 
 def search_s2(aoi_geojson_path: str, start: str, end: str, limit: int = 2) -> List[STACItem]:
     gdf = gpd.read_file(aoi_geojson_path).to_crs(4326)
-    geom = json.loads(gdf.iloc[0].geometry.to_json())
+    geom = mapping(gdf.iloc[0].geometry)
     client = Client.open("https://earth-search.aws.element84.com/v1")
     search = client.search(collections=["sentinel-2-l2a"], intersects=geom, datetime=f"{start}/{end}")
     items = []
@@ -27,7 +27,7 @@ def search_s2(aoi_geojson_path: str, start: str, end: str, limit: int = 2) -> Li
 
 def search_s1(aoi_geojson_path: str, start: str, end: str, limit: int = 2) -> List[STACItem]:
     gdf = gpd.read_file(aoi_geojson_path).to_crs(4326)
-    geom = json.loads(gdf.iloc[0].geometry.to_json())
+    geom = mapping(gdf.iloc[0].geometry)
     client = Client.open("https://earth-search.aws.element84.com/v1")
     search = client.search(collections=["sentinel-1-grd"], intersects=geom, datetime=f"{start}/{end}")
     items = []
